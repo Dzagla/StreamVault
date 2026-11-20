@@ -1,4 +1,5 @@
-pandas>=2.2.0
-numpy>=1.26.0
-requests>=2.31.0
-pytest>=8.0.0
+# Pinned dependencies for deterministic reproducibility across quarterly runs
+pandas==3.1.1
+numpy==2.5.5
+requests==2.34.2
+pytest==8.3.4

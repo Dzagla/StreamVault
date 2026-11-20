@@ -1,6 +1,6 @@
 # StreamVault Licensing Analysis Pipeline
 
-A reproducible, production-grade data analysis and ETL pipeline in plain Python, pandas, and NumPy. 
+A reproducible, modular data analysis and ETL pipeline in plain Python, pandas, and NumPy.
 
 Built for Kwame Boateng, VP of Content Acquisition at StreamVault, to allocate a **$14.0M licensing budget** between franchise bundles and standalone hits ahead of the board review. The pipeline ingests a legacy candidate list (`data/id_list.csv`), acquires live metadata from the public TMDb API, normalizes nested JSON into grain-defended tables, validates all quality faults, and computes business KPIs across two historical windows.
 
@@ -8,8 +8,8 @@ Built for Kwame Boateng, VP of Content Acquisition at StreamVault, to allocate a
  data/id_list.csv ────────────────┐
  TMDb API (details & credits) ────┤
                                   ▼
-   EXTRACT ──► VALIDATE ──► TRANSFORM ──► QA CHECKS ──► ANALYSE ──► LOAD
-   extract.py  validate.py  transform.py   checks.py     analyse.py   load.py
+   EXTRACT ──► VALIDATE ──► TRANSFORM ──► QA CHECKS ──► ANALYSE ──► SENSITIVITY
+   extract.py  validate.py  transform.py   checks.py     analyse.py   sensitivity.py
    └──────────────── run in order, retried, logged, by run_pipeline.py ─────────────────┘
                                   │
                                   ▼
@@ -30,7 +30,7 @@ Built for Kwame Boateng, VP of Content Acquisition at StreamVault, to allocate a
 | `docs/findings.md` | Data diagnosis & findings log | Complete reconciliation of all 127 IDs, traced to decisions and risk rankings. |
 | `docs/adr/` | Architecture Decision Records | Formal architectural decisions (`001-` to `003-`), versioned with code. |
 | `out/` | Executive deliverables | Client memo (`memo.md`), window KPIs (`analysis.csv`), sensitivity frontier. |
-| `data/` | Ingested candidate list and generated tabular datasets | Clean tables (`movies.csv`, `cast.csv`, `crew.csv`) and cached raw JSONs. |
+| `data/` | Ingested candidate list and generated tabular datasets | Clean tables (`movies.csv`, `cast.csv`, `crew.csv`); local raw API JSONs in `data/raw/` are excluded via `.gitignore`. |
 
 ---
 
@@ -38,7 +38,7 @@ Built for Kwame Boateng, VP of Content Acquisition at StreamVault, to allocate a
 
 ### Prerequisites
 - Python 3.11 or newer
-- Dependencies: `pandas`, `numpy`, `requests`
+- Dependencies: `pandas`, `numpy`, `requests`, `pytest` (optional test runner; test suite also executes via standard library `unittest`)
 - TMDb API Key (free from [themoviedb.org](https://www.themoviedb.org/settings/api))
 
 ### Environment Configuration
@@ -62,8 +62,8 @@ Executes all stages top-to-bottom from a fresh clone without manual intervention
 python run_pipeline.py
 ```
 
-### Run Live External API Spot-Check (LO5)
-Performs field-by-field verification against live TMDb endpoints for deliberate edge-case titles:
+### Run Quality Gates & Live TMDb Spot-Checks
+Executes full candidate reconciliation against 127 total rows, multi-table grain uniqueness checks (`movies`, `cast`, `crew`), and live TMDb API spot-checks across edge-case titles:
 ```bash
 python -m pipeline.checks
 ```
@@ -97,24 +97,26 @@ python run_tests.py
 | Metric | All Years: Franchise | All Years: Standalone | 2000-Onward: Franchise | 2000-Onward: Standalone |
 | :--- | :--- | :--- | :--- | :--- |
 | **Catalog Count** | 96 titles | 16 titles | 63 titles | 8 titles |
+| **Total Post-2000 Titles** | — | — | **71 titles** (`release_year >= 2000`) |
 | **Median Box Office** | **$578.9M** | $161.8M | **$786.6M** | $283.2M |
 | **Median ROI** | **4.62x** | 2.84x | **4.05x** | 2.84x |
 | **Average Rating** | 7.46 / 10 | **8.37 / 10** | 7.33 / 10 | **8.26 / 10** |
 
-- **Both Windows Agree:** In both historical and modern eras, franchise bundles outperform standalones by **2.4x to 3.6x in median box office** and deliver superior capital return (4.05x vs. 2.84x median ROI).
-- **The Standalone Advantage:** Standalone hits hold a decisive advantage in critical reception (**8.37/10** vs. 7.46/10), providing subscriber acquisition anchors with zero franchise sequel fatigue.
+- **Both Windows Agree:** Franchise bundles demonstrate commercial dominance across both horizons: **3.58x median box office superiority across all years** ($578.9M vs. $161.8M) and **2.78x in the 2000-onward window** ($786.6M vs. $283.2M). Across rolling 5-year cutoff thresholds from 1985 to 2000, this premium spans **2.53x to 3.58x** (see `out/sensitivity_report.csv`).
+- **The Standalone Advantage:** Standalone hits hold a decisive advantage in critical reception (**8.37/10** vs. 7.46/10 all-years; **8.26/10** vs. 7.33/10 modern), serving as subscriber acquisition and prestige retention anchors with zero sequel fatigue.
 
 ### 2. The $14.0M Capital Commitment Recommendation
-- **$9.5M (68%)** allocated to top-tier franchise trilogy bundles: *The Lord of the Rings*, *The Dark Knight*, and *The Godfather*.
-- **$4.5M (32%)** reserved for high-retention standalone acquisitions: *The Shawshank Redemption*, *Schindler's List*, *Spirited Away*, *Interstellar*, and *Pulp Fiction*.
+- **$9.6M (68.6%)** allocated to top-tier franchise trilogy bundles: *The Lord of the Rings* ($4.8M), *The Dark Knight* ($3.3M), and *The Godfather* ($1.5M).
+- **$4.4M (31.4%)** reserved for high-retention standalone acquisitions: *Interstellar* ($1.3M), *Spirited Away* ($0.9M), *The Shawshank Redemption* ($0.8M), *Schindler's List* ($0.75M), and *Pulp Fiction* ($0.65M).
+- **Total:** Exactly $14.0M capital commitment across 14 curated titles (9 franchise titles, 5 standalone titles).
 
 ### 3. Candidate List Reconciliation (100% Accounted For)
 - **112 FETCHED:** Cleanly parsed into analytical models.
 - **6 DUPLICATE:** Excluded (`603`, `278`, `1891`, `155`, `550`, `680`).
 - **5 FETCH_FAILED (404):** Fictional IDs logged (`8471293`, `9412887`, `8471294`, `9412888`, `7733901`).
 - **4 INVALID:** Syntactically unparseable lines (`-1`, `tt0468569`, `N/A`, blank row 69).
-- **Total: 127** (Reconciled with zero silent drops).
+- **Total: 127** (Reconciled with zero silent drops; FETCHED + DUPLICATE + FETCH_FAILED + INVALID = 127).
 
 ### 4. Performance & Scalability (LO4)
-- **Execution Speed:** Vectorized analysis executes in **~0.22 seconds**, well below the strict **60.0-second performance budget** (< 0.4% budget utilized).
-- **Future Proofing:** Built without row-level iteration (`iterrows`), allowing Adjoa to re-run the pipeline on ~500 candidate titles live during quarterly reviews.
+- **Execution Speed:** Vectorized analytical KPI calculation (`pipeline.analyse`) executes in **~0.05 seconds**, and the complete master pipeline (`run_pipeline.py`) finishes in **~0.25 seconds** (measured via `time.perf_counter()`), utilizing less than 0.5% of the **60.0-second performance budget**.
+- **Future Proofing:** Built strictly using vectorized array operations without row-level iteration (`iterrows`), allowing Adjoa to re-run the pipeline on ~500 candidate titles live during quarterly reviews.
