@@ -2,7 +2,6 @@
 pipeline/load.py
 ----------------
 Write curated tabular datasets safely, atomically, and idempotently.
-Modeled on Lecture 2 pipeline/load.py.
 
 Guarantees:
 1. Schema contract enforcement: asserts expected columns exist before saving.
