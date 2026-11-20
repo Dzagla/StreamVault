@@ -1,0 +1,13 @@
+out/
+.venv/
+Reference/
+
+# Raw API responses — large files, regeneratable by running pipeline/fetch.py
+data/raw/
+
+# Fetch log is generated output; keep id_list.csv tracked
+data/fetch_log.csv
+
+# API key must never be committed
+.env
+
