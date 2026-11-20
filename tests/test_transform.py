@@ -1,8 +1,8 @@
 """
 tests/test_transform.py
 -----------------------
-Unit tests for pipeline.transform and data un-nesting.
-Modeled on  2 tests/test_transform.py.
+Unit tests for pipeline.transform data extraction, schema conformity,
+and un-nesting of movie details, cast, and crew records.
 """
 
 import unittest

@@ -1,18 +1,17 @@
 """
 pipeline/checks.py
 ------------------
-Quality gates, reconciliations, and spot-checks before loading (LO4, LO5).
+Quality gates, grain verifications, reconciliations, and live API spot-checks (LO4, LO5).
 
 QA gate pattern:
-- check_reconciliation: every candidate ID is accounted for (127 expected).
-- check_grain_uniqueness: asserts no duplicate film keys in curated tables.
-- check_performance_budget: asserts runtime stays within performance budget (LO4).
+- check_candidate_reconciliation: every candidate ID is accounted for (127 expected),
+  and sum of all recognized dispositions equals total count.
+- check_table_grains: asserts no duplicate primary/composite keys in movies, cast, or crew.
 - verify_against_live_api: deliberate external API spot-checks against tentpoles (LO5).
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import pandas as pd
 import requests
@@ -20,73 +19,118 @@ import requests
 from pipeline.config import (
     TMDB_BASE,
     FLAT_MOVIES,
+    FLAT_CAST,
+    FLAT_CREW,
     FETCH_LOG,
     EXPECTED_ID_COUNT,
-    TIME_BUDGET_SECONDS,
-    ROOT,
+    ALL_DISPOSITIONS,
+    get_api_key,
 )
 
 SPOTCHECK_IDS = [155, 278, 671, 680, 157336]  # Deliberate edge cases and tentpoles
 
 
 class ReconciliationError(Exception):
-    """Raised when candidate counts or tables do not reconcile."""
+    """Raised when candidate counts or tabular grains fail QA gates."""
 
 
 def check_candidate_reconciliation(log_path: Path = FETCH_LOG) -> dict[str, int]:
-    """Assert all candidate IDs are accounted for and reconcile to EXPECTED_ID_COUNT."""
+    """
+    Assert all candidate IDs are accounted for, reconcile to EXPECTED_ID_COUNT,
+    and verify that all recorded dispositions belong strictly to the schema contract.
+    """
     if not log_path.exists():
         raise ReconciliationError(f"Fetch log does not exist: {log_path}")
 
     log_df = pd.read_csv(log_path)
     total = len(log_df)
 
-    counts = log_df["disposition"].value_counts().to_dict()
-
     if total != EXPECTED_ID_COUNT:
         raise ReconciliationError(
             f"Candidate list mismatch: expected {EXPECTED_ID_COUNT}, found {total}"
+        )
+
+    counts = log_df["disposition"].value_counts().to_dict()
+
+    # Verify that only valid dispositions exist
+    unknown_dispositions = set(counts.keys()) - ALL_DISPOSITIONS
+    if unknown_dispositions:
+        raise ReconciliationError(
+            f"Unknown disposition labels found in fetch log: {unknown_dispositions}"
+        )
+
+    # Verify that dispositions sum exactly to the total
+    disposition_sum = sum(counts.values())
+    if disposition_sum != total:
+        raise ReconciliationError(
+            f"Disposition sum mismatch: counts sum to {disposition_sum}, total rows is {total}"
         )
 
     print(f"✓ Quality Gate: Candidate reconciliation passed ({total}/{EXPECTED_ID_COUNT} accounted for)")
     return counts
 
 
-def check_grain_uniqueness(df_movies: pd.DataFrame) -> None:
-    """Assert 1 row per film grain with unique tmdb_id."""
+def check_table_grains(
+    df_movies: pd.DataFrame,
+    df_cast: pd.DataFrame | None = None,
+    df_crew: pd.DataFrame | None = None,
+) -> None:
+    """
+    Verify tabular grains from ADR 001:
+    - movies: unique `tmdb_id`
+    - cast: unique composite key (`tmdb_id`, `person_id`, `cast_order`)
+    - crew: unique composite key (`tmdb_id`, `person_id`, `department`, `job`)
+    """
+    # 1. Movies grain
     if not df_movies["tmdb_id"].is_unique:
         duplicates = df_movies[df_movies["tmdb_id"].duplicated()]["tmdb_id"].tolist()
         raise ReconciliationError(f"Duplicate tmdb_id in movies table: {duplicates}")
-    print("✓ Quality Gate: Grain uniqueness verified (1 row per unique tmdb_id)")
+    print("✓ Quality Gate: Movies grain verified (unique tmdb_id)")
+
+    # 2. Cast grain
+    if df_cast is not None and not df_cast.empty:
+        cast_key = ["tmdb_id", "person_id", "cast_order"]
+        if df_cast.duplicated(subset=cast_key).any():
+            dup_cast = df_cast[df_cast.duplicated(subset=cast_key)][cast_key].head(5).to_dict("records")
+            raise ReconciliationError(f"Duplicate composite keys in cast table: {dup_cast}")
+        print("✓ Quality Gate: Cast grain verified (unique tmdb_id + person_id + cast_order)")
+
+    # 3. Crew grain
+    if df_crew is not None and not df_crew.empty:
+        crew_key = ["tmdb_id", "person_id", "department", "job"]
+        if df_crew.duplicated(subset=crew_key).any():
+            dup_crew = df_crew[df_crew.duplicated(subset=crew_key)][crew_key].head(5).to_dict("records")
+            raise ReconciliationError(f"Duplicate composite keys in crew table: {dup_crew}")
+        print("✓ Quality Gate: Crew grain verified (unique tmdb_id + person_id + department + job)")
 
 
-def _get_api_key() -> str:
-    env_file = ROOT / ".env"
-    if env_file.exists():
-        with open(env_file) as f:
-            for line in f:
-                if line.startswith("#") or "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                if k.strip() == "TMDB_API_KEY":
-                    return v.strip().strip('"').strip("'")
-    return os.environ.get("TMDB_API_KEY", "")
+# Backward compatibility and explicit alias
+check_grain_uniqueness = check_table_grains
 
 
-def verify_against_live_api() -> None:
-    """Deliberate spot-check against live TMDb API (LO5)."""
+def verify_against_live_api() -> bool:
+    """
+    Deliberate spot-check against live TMDb API (LO5).
+    Returns True if spot-checks completed, False if network was unreachable.
+    Fails loudly on discrepancies rather than labeling them 'acceptable variances'.
+    """
     print("\n" + "=" * 65)
     print("LO5 Spot-Check Verification: Local Clean Data vs. Live TMDb API")
     print("=" * 65)
 
-    api_key = _get_api_key()
+    api_key = get_api_key()
     if not api_key:
-        print("Warning: TMDB_API_KEY not found in environment. Skipping live check.")
-        return
+        print("⚠ Live spot-check skipped: TMDB_API_KEY not configured in environment.")
+        return False
+
+    if not FLAT_MOVIES.exists():
+        print(f"⚠ Live spot-check skipped: {FLAT_MOVIES} not found.")
+        return False
 
     df_local = pd.read_csv(FLAT_MOVIES).set_index("tmdb_id")
     discrepancies_found = 0
     checks_performed = 0
+    network_errors = 0
 
     for tid in SPOTCHECK_IDS:
         if tid not in df_local.index:
@@ -100,10 +144,12 @@ def verify_against_live_api() -> None:
             resp = requests.get(url, params=params, timeout=10)
             if resp.status_code != 200:
                 print(f"ID {tid}: Live API returned status {resp.status_code}")
+                network_errors += 1
                 continue
             live_data = resp.json()
         except Exception as exc:
             print(f"ID {tid}: Network error during live verification ({exc}).")
+            network_errors += 1
             continue
 
         print(f"\nChecking ID {tid} — '{local_row['title']}':")
@@ -114,7 +160,7 @@ def verify_against_live_api() -> None:
         if local_row["title"] == live_title:
             print(f"  ✓ Title matches: '{live_title}'")
         else:
-            print(f"  ✗ Title mismatch: local='{local_row['title']}' vs live='{live_title}'")
+            print(f"  ✗ Discrepancy: local title='{local_row['title']}' vs live='{live_title}'")
             discrepancies_found += 1
 
         # Release date check
@@ -123,7 +169,7 @@ def verify_against_live_api() -> None:
         if local_row["release_date"] == live_rel:
             print(f"  ✓ Release date matches: '{live_rel}'")
         else:
-            print(f"  ✗ Release date mismatch: local='{local_row['release_date']}' vs live='{live_rel}'")
+            print(f"  ✗ Discrepancy: local release_date='{local_row['release_date']}' vs live='{live_rel}'")
             discrepancies_found += 1
 
         # Franchise flag check
@@ -132,20 +178,29 @@ def verify_against_live_api() -> None:
         if bool(local_row["is_franchise"]) == live_coll:
             print(f"  ✓ Franchise status matches: {live_coll}")
         else:
-            print(f"  ✗ Franchise status mismatch: local={local_row['is_franchise']} vs live={live_coll}")
+            print(f"  ✗ Discrepancy: local franchise={local_row['is_franchise']} vs live={live_coll}")
             discrepancies_found += 1
 
     print("\n" + "=" * 65)
-    print(f"Spot-check complete: {checks_performed} attributes verified across {len(SPOTCHECK_IDS)} titles.")
+    if network_errors == len(SPOTCHECK_IDS):
+        print("✗ Spot-check failed: Live API host was unreachable for all test titles.")
+        print("=" * 65)
+        return False
+
+    print(f"Spot-check complete: {checks_performed} attributes checked across {len(SPOTCHECK_IDS)} titles.")
     if discrepancies_found == 0:
-        print("✓ 100% field parity confirmed between clean pipeline and live source.")
+        print("✓ Field parity confirmed between clean pipeline and live source.")
     else:
-        print(f"⚠ {discrepancies_found} acceptable variance(s) documented.")
+        print(f"✗ Discrepancies detected: {discrepancies_found} field mismatch(es) found.")
     print("=" * 65)
+    return discrepancies_found == 0
 
 
 if __name__ == "__main__":
     check_candidate_reconciliation()
     if FLAT_MOVIES.exists():
-        check_grain_uniqueness(pd.read_csv(FLAT_MOVIES))
+        df_m = pd.read_csv(FLAT_MOVIES)
+        df_c = pd.read_csv(FLAT_CAST) if FLAT_CAST.exists() else None
+        df_w = pd.read_csv(FLAT_CREW) if FLAT_CREW.exists() else None
+        check_table_grains(df_m, df_c, df_w)
     verify_against_live_api()

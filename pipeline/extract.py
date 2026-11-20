@@ -49,6 +49,7 @@ from pipeline.config import (
     DISPOSITION_DUPLICATE    as DUPLICATE,
     DISPOSITION_FETCH_FAILED as FETCH_FAILED,
     EXPECTED_ID_COUNT,
+    get_api_key,
 )
 
 
@@ -57,18 +58,8 @@ from pipeline.config import (
 # ---------------------------------------------------------------------------
 
 def _load_api_key() -> str:
-    """Read TMDB_API_KEY from .env or the process environment."""
-    env_file = ROOT / ".env"
-    if env_file.exists():
-        with open(env_file) as fh:
-            for line in fh:
-                line = line.strip()
-                if line.startswith("#") or "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                if k.strip() == "TMDB_API_KEY":
-                    return v.strip().strip('"').strip("'")
-    key = os.environ.get("TMDB_API_KEY", "")
+    """Read TMDB_API_KEY from config helper or environment."""
+    key = get_api_key()
     if not key:
         raise EnvironmentError(
             "TMDB_API_KEY not found. Add it to .env or set the environment variable."
@@ -232,11 +223,20 @@ def fetch_all(records: list[dict], api_key: str, *, force: bool = False) -> list
             tid = rec["tmdb_id"]
             details_file = RAW_DIR / f"{tid}_details.json"
             credits_file = RAW_DIR / f"{tid}_credits.json"
+            not_found_marker = RAW_DIR / f"{tid}_not_found.json"
+
+            print(f"[{idx:>3}/{total}] ID {tid}", end="")
+
+            if not_found_marker.exists() and not force:
+                rec["details_status"] = "not_found"
+                rec["credits_status"] = "not_found"
+                rec["disposition"] = FETCH_FAILED
+                rec["reason"] = "ID not found in TMDb (details 404)"
+                print(f"  details=cached(404)  credits=cached(404)  → {FETCH_FAILED}")
+                continue
 
             already_have_details = details_file.exists() and not force
             already_have_credits = credits_file.exists() and not force
-
-            print(f"[{idx:>3}/{total}] ID {tid}", end="")
 
             # ---- details endpoint ----------------------------------------
             if already_have_details:
@@ -259,6 +259,7 @@ def fetch_all(records: list[dict], api_key: str, *, force: bool = False) -> list
                     print(f"  details=ok", end="")
                 elif status == "not_found":
                     rec["details_status"] = "not_found"
+                    not_found_marker.write_text("{}", encoding="utf-8")
                     print(f"  details=404", end="")
                 else:
                     rec["details_status"] = "failed"
@@ -368,7 +369,7 @@ def main() -> None:
 
     print("Loading API key …")
     api_key = _load_api_key()
-    print(f"API key loaded ({api_key[:4]}{'*' * (len(api_key) - 4)})\n")
+    print("API key loaded ([PROTECTED_KEY_CONFIGURED])\n")
 
     print(f"Reading candidate list from {ID_LIST.relative_to(ROOT)} …")
     records = load_candidate_ids(ID_LIST)

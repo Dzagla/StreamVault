@@ -15,8 +15,8 @@ What this module does
      * includes billing order, character, popularity
    - crew: 1 row per film-crew assignment (composite key: tmdb_id, person_id, department, job)
      * focuses on Key creative roles: Director, Producer, Screenplay/Writer
-3. Validates grain uniqueness (no accidental duplication on primary keys).
-4. Saves flat, clean tabular datasets to CSV via pipeline.load.
+3. Validates grain uniqueness, non-null release years, and non-negative financial ranges.
+4. Saves flat, clean tabular datasets atomically via pipeline.load.
 """
 
 from __future__ import annotations
@@ -29,12 +29,14 @@ import pandas as pd
 
 from pipeline.config import (
     RAW_DIR,
-    FLAT_MOVIES,
-    FLAT_CAST,
-    FLAT_CREW,
     FETCH_LOG,
     DISPOSITION_FETCHED,
 )
+from pipeline.load import save_curated_tables
+
+
+class TransformationQualityError(Exception):
+    """Raised when transformed records fail data quality range or null checks."""
 
 
 def _safe_int(val: Any) -> int | None:
@@ -69,10 +71,10 @@ def parse_movie_details(data: dict) -> dict:
         "release_year": release_year,
         "status": data.get("status"),
         "runtime": _safe_int(data.get("runtime")),
-        "budget": data.get("budget"),
-        "revenue": data.get("revenue"),
-        "popularity": data.get("popularity"),
-        "vote_average": data.get("vote_average"),
+        "budget": float(data.get("budget", 0) or 0),
+        "revenue": float(data.get("revenue", 0) or 0),
+        "popularity": float(data.get("popularity", 0) or 0),
+        "vote_average": float(data.get("vote_average", 0) or 0),
         "vote_count": _safe_int(data.get("vote_count")),
         "original_language": data.get("original_language"),
         # Franchise / Collection metadata
@@ -98,7 +100,7 @@ def parse_movie_cast(tmdb_id: int, credits_data: dict) -> list[dict]:
             "name": item.get("name"),
             "character": item.get("character"),
             "cast_order": _safe_int(item.get("order")),
-            "popularity": item.get("popularity"),
+            "popularity": float(item.get("popularity", 0) or 0),
             "known_for_department": item.get("known_for_department"),
         })
     return records
@@ -117,17 +119,34 @@ def parse_movie_crew(tmdb_id: int, credits_data: dict) -> list[dict]:
             "name": item.get("name"),
             "department": item.get("department"),
             "job": item.get("job"),
-            "popularity": item.get("popularity"),
+            "popularity": float(item.get("popularity", 0) or 0),
         })
     return records
 
 
+def _validate_transform_quality(df_movies: pd.DataFrame) -> None:
+    """Explicit range and null gates to enforce analytical rigor."""
+    # 1. Null check on critical keys
+    if df_movies["tmdb_id"].isna().any():
+        raise TransformationQualityError("Transformed movies contain null tmdb_id.")
+    if df_movies["release_year"].isna().any():
+        null_titles = df_movies[df_movies["release_year"].isna()]["title"].tolist()
+        raise TransformationQualityError(f"Transformed movies missing release_year: {null_titles}")
+
+    # 2. Range checks
+    if (df_movies["revenue"] < 0).any():
+        raise TransformationQualityError("Transformed movies contain negative revenue values.")
+    if (df_movies["budget"] < 0).any():
+        raise TransformationQualityError("Transformed movies contain negative budget values.")
+    if not df_movies["vote_average"].between(0.0, 10.0).all():
+        raise TransformationQualityError("vote_average contains values outside the [0, 10] range.")
+
+
 def flatten_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Reads all successfully fetched raw responses and produces
-    the three tabular datasets: movies, cast, crew.
+    Reads all successfully fetched raw responses, validates schema and quality gates,
+    and atomically saves the curated datasets.
     """
-    # Identify which IDs were successfully fetched
     fetched_ids: list[int] = []
     if FETCH_LOG.exists():
         log_df = pd.read_csv(FETCH_LOG)
@@ -135,7 +154,6 @@ def flatten_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
             int(x) for x in log_df.loc[log_df["disposition"] == DISPOSITION_FETCHED, "tmdb_id"].dropna()
         ]
     else:
-        # Fallback to files present in raw directory
         for p in RAW_DIR.glob("*_details.json"):
             tid_str = p.name.split("_")[0]
             if tid_str.isdigit():
@@ -167,21 +185,11 @@ def flatten_all() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     df_cast = pd.DataFrame(cast_rows)
     df_crew = pd.DataFrame(crew_rows)
 
-    # Validate grain constraints
-    assert df_movies["tmdb_id"].is_unique, "Error: movies table has duplicate tmdb_id!"
-    print(f"✓ movies: {len(df_movies)} rows (grain: 1 row per film, unique tmdb_id)")
-    print(f"✓ cast:   {len(df_cast)} rows (grain: 1 row per film-cast member)")
-    print(f"✓ crew:   {len(df_crew)} rows (grain: 1 row per film-crew assignment)")
+    # Validate quality range and null gates
+    _validate_transform_quality(df_movies)
 
-    # Save outputs
-    df_movies.to_csv(FLAT_MOVIES, index=False)
-    df_cast.to_csv(FLAT_CAST, index=False)
-    df_crew.to_csv(FLAT_CREW, index=False)
-
-    print(f"\nOutputs written:")
-    print(f"  - {FLAT_MOVIES}")
-    print(f"  - {FLAT_CAST}")
-    print(f"  - {FLAT_CREW}")
+    # Save outputs atomically via load module
+    save_curated_tables(df_movies, df_cast, df_crew)
 
     return df_movies, df_cast, df_crew
 

@@ -21,9 +21,28 @@ class TestLoad(unittest.TestCase):
             cast_path = tmp / "cast.csv"
             crew_path = tmp / "crew.csv"
 
-            df_movies = pd.DataFrame({"tmdb_id": [155], "title": ["The Dark Knight"]})
-            df_cast = pd.DataFrame({"tmdb_id": [155], "person_id": [3894]})
-            df_crew = pd.DataFrame({"tmdb_id": [155], "person_id": [525]})
+            df_movies = pd.DataFrame({
+                "tmdb_id": [155],
+                "title": ["The Dark Knight"],
+                "release_year": [2008],
+                "budget": [185000000.0],
+                "revenue": [1004558444.0],
+                "vote_average": [8.5],
+                "is_franchise": [True],
+            })
+            df_cast = pd.DataFrame({
+                "tmdb_id": [155],
+                "person_id": [3894],
+                "name": ["Christian Bale"],
+                "cast_order": [0],
+            })
+            df_crew = pd.DataFrame({
+                "tmdb_id": [155],
+                "person_id": [525],
+                "name": ["Christopher Nolan"],
+                "department": ["Directing"],
+                "job": ["Director"],
+            })
 
             with patch("pipeline.load.FLAT_MOVIES", movies_path), \
                  patch("pipeline.load.FLAT_CAST", cast_path), \
