@@ -1,7 +1,7 @@
 """
 pipeline/transform.py
 ---------------------
-Lab Part 2 (LO3): Parsing and transforming nested JSON into tabular datasets.
+Parsing and transforming nested JSON into tabular datasets.
 
 What this module does
 ---------------------

@@ -1,7 +1,7 @@
 """
 pipeline/analyse.py
 -------------------
-Lab Part 3 (LO4): Vectorised Analysis & Business KPIs under performance budget.
+Vectorised Analysis & Business KPIs under performance budget.
 
 Addresses Kwame Boateng's core requirements:
 1. Franchise vs. Standalone comparison presented both ways:

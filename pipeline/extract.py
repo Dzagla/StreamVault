@@ -1,7 +1,7 @@
 """
 pipeline/extract.py
 -------------------
-Lab Part 1: Acquire raw data for all 127 TMDb candidates.
+Acquire raw data for all 127 TMDb candidates.
 
 What this module does
 ---------------------
