@@ -17,7 +17,7 @@ Addresses Kwame Boateng's core requirements:
    - Top 3 Franchise Bundles
    - Top 5 Standalone Titles
 5. Single strongest franchise deal note
-6. Strict time budget verification (LO4 target: < 60.0s)
+6. Strict time budget verification (target: < 60.0s)
 """
 
 from __future__ import annotations
@@ -212,7 +212,7 @@ def run_analysis() -> None:
     print("  • Decisive Driver: +28.4% box office expansion (Film 1: $898M -> Film 3: $1,156M)")
     print("    with ratings rising (8.45 -> 8.51/10), proving zero sequel decay.")
 
-    # 4. Performance Budget Assertion (LO4)
+    # 4. Performance Budget Assertion 
     elapsed = time.perf_counter() - start_time
     print("\n" + "=" * 60)
     print(f"Performance report: execution completed in {elapsed:.4f} seconds")

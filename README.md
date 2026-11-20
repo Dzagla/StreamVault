@@ -117,6 +117,6 @@ python run_tests.py
 - **4 INVALID:** Syntactically unparseable lines (`-1`, `tt0468569`, `N/A`, blank row 69).
 - **Total: 127** (Reconciled with zero silent drops; FETCHED + DUPLICATE + FETCH_FAILED + INVALID = 127).
 
-### 4. Performance & Scalability (LO4)
+### 4. Performance & Scalability 
 - **Execution Speed:** Vectorized analytical KPI calculation (`pipeline.analyse`) executes in **~0.05 seconds**, and the complete master pipeline (`run_pipeline.py`) finishes in **~0.25 seconds** (measured via `time.perf_counter()`), utilizing less than 0.5% of the **60.0-second performance budget**.
 - **Future Proofing:** Built strictly using vectorized array operations without row-level iteration (`iterrows`), allowing Adjoa to re-run the pipeline on ~500 candidate titles live during quarterly reviews.

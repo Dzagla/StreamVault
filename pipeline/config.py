@@ -90,7 +90,7 @@ EXPECTED_ID_COUNT = 127
 CUTOFF_YEAR = 2000     # "2000-onward" window (Yaw in Finance's concern)
 
 # ---------------------------------------------------------------------------
-# Performance budget (LO4)
+# Performance budget 
 # ---------------------------------------------------------------------------
 # The analysis stage must complete within this many seconds on the
 # 127-title dataset. Adjoa will re-run on ~500 titles next year.

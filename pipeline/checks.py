@@ -1,13 +1,13 @@
 """
 pipeline/checks.py
 ------------------
-Quality gates, grain verifications, reconciliations, and live API spot-checks (LO4, LO5).
+Quality gates, grain verifications, reconciliations, and live API spot-checks.
 
 QA gate pattern:
 - check_candidate_reconciliation: every candidate ID is accounted for (127 expected),
   and sum of all recognized dispositions equals total count.
 - check_table_grains: asserts no duplicate primary/composite keys in movies, cast, or crew.
-- verify_against_live_api: deliberate external API spot-checks against tentpoles (LO5).
+- verify_against_live_api: deliberate external API spot-checks against tentpoles.
 """
 
 from __future__ import annotations
@@ -110,12 +110,12 @@ check_grain_uniqueness = check_table_grains
 
 def verify_against_live_api() -> bool:
     """
-    Deliberate spot-check against live TMDb API (LO5).
+    Deliberate spot-check against live TMDb API.
     Returns True if spot-checks completed, False if network was unreachable.
     Fails loudly on discrepancies rather than labeling them 'acceptable variances'.
     """
     print("\n" + "=" * 65)
-    print("LO5 Spot-Check Verification: Local Clean Data vs. Live TMDb API")
+    print("Spot-Check Verification: Local Clean Data vs. Live TMDb API")
     print("=" * 65)
 
     api_key = get_api_key()
