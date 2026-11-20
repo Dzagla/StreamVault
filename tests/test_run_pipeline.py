@@ -2,7 +2,6 @@
 tests/test_run_pipeline.py
 --------------------------
 Integration test for complete pipeline execution.
-Modeled on Lecture 2 tests/test_run_pipeline.py.
 """
 
 import unittest

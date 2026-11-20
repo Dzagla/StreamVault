@@ -2,7 +2,6 @@
 tests/test_load.py
 ------------------
 Unit tests for pipeline.load.
-Modeled on Lecture 2 tests/test_load.py.
 """
 
 import tempfile

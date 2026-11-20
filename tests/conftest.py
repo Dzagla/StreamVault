@@ -2,7 +2,6 @@
 tests/conftest.py
 -----------------
 Shared test data and fixtures for StreamVault unit tests.
-Modeled on Lecture 2 tests/conftest.py.
 """
 
 import json

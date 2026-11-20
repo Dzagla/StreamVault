@@ -2,7 +2,7 @@
 tests/test_checks.py
 --------------------
 Unit tests for pipeline.checks (QA gates and reconciliations).
-Modeled on Lecture 2 tests/test_checks.py.
+
 """
 
 import tempfile

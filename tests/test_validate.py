@@ -2,7 +2,6 @@
 tests/test_validate.py
 ----------------------
 Unit tests for pipeline.validate.
-Modeled on Lecture 2 tests/test_validate.py.
 """
 
 import tempfile

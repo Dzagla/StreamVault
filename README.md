@@ -24,6 +24,8 @@ Built for Kwame Boateng, VP of Content Acquisition at StreamVault, to allocate a
 | :--- | :--- | :--- |
 | `pipeline/` | Production pipeline code: one file per stage, plus `config.py` | Production logic that runs automatically. No ad-hoc scripts live here. |
 | `run_pipeline.py` | Master orchestrator | Single-command runner for an end-to-end, reproducible clean-clone execution. |
+| `tests/` | Unit and integration test suite | Proves pipeline logic on hand-made test data before touching production files. |
+| `run_tests.py` | Test runner | Runs all 21 unit/integration tests with zero external test runner dependencies. |
 | `profiling/profile.ipynb` | Exploratory profiling notebook | Investigates raw inputs, checks spec claims, and reveals rows behind anomalies. |
 | `docs/findings.md` | Data diagnosis & findings log | Complete reconciliation of all 127 IDs, traced to decisions and risk rankings. |
 | `docs/adr/` | Architecture Decision Records | Formal architectural decisions (`001-` to `003-`), versioned with code. |
@@ -76,6 +78,14 @@ python -m pipeline.sensitivity
 Open and run the investigation notebook:
 ```bash
 jupyter lab profiling/profile.ipynb
+```
+
+### Run Automated Test Suite
+Runs all 21 unit and integration tests covering extraction, validation, transformation, quality gates, and loading:
+```bash
+python run_tests.py
+# or: python -m unittest discover tests
+# or: pytest
 ```
 
 ---

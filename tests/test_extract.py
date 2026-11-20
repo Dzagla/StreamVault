@@ -2,7 +2,6 @@
 tests/test_extract.py
 ---------------------
 Unit tests for pipeline.extract.
-Modeled on Lecture 2 tests/test_extract.py.
 """
 
 import json

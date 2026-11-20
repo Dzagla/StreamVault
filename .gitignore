@@ -11,3 +11,7 @@ data/fetch_log.csv
 # API key must never be committed
 .env
 
+# Python, pytest and Jupyter caches: rebuilt automatically
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
